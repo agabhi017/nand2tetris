@@ -1,0 +1,68 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/02/ALU.hdl
+
+/**
+ * The ALU (Arithmetic Logic Unit).
+ * Computes one of the following functions:
+ * x+y, x-y, y-x, 0, 1, -1, x, y, -x, -y, !x, !y,
+ * x+1, y+1, x-1, y-1, x&y, x|y on two 16-bit inputs, 
+ * according to 6 input bits denoted zx,nx,zy,ny,f,no.
+ * In addition, the ALU computes two 1-bit outputs:
+ * if the ALU output == 0, zr is set to 1; otherwise zr is set to 0;
+ * if the ALU output < 0, ng is set to 1; otherwise ng is set to 0.
+ */
+
+// Implementation: the ALU logic manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) set x = 0        // 16-bit constant
+// if (nx == 1) set x = !x       // bitwise not
+// if (zy == 1) set y = 0        // 16-bit constant
+// if (ny == 1) set y = !y       // bitwise not
+// if (f == 1)  set out = x + y  // integer 2's complement addition
+// if (f == 0)  set out = x & y  // bitwise and
+// if (no == 1) set out = !out   // bitwise not
+// if (out == 0) set zr = 1
+// if (out < 0) set ng = 1
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute out = x + y (if 1) or x & y (if 0)
+        no; // negate the out output?
+
+    OUT 
+        out[16], // 16-bit output
+        zr, // 1 if (out == 0), 0 otherwise
+        ng; // 1 if (out < 0),  0 otherwise
+
+    PARTS:
+	Mux16		(a = x, b[0..15] = false, sel = zx, out = xzx);			// x or 0
+	Mux16		(a = y, b[0..15] = false, sel = zy, out = yzy);			// y or 0
+	Not16		(in = xzx, out = Notxzx);								// !x
+	Not16		(in = yzy, out = Notyzy);								// !y
+	Mux16		(a = xzx, b = Notxzx, sel = nx, out = xout);			// !x?
+	Mux16		(a = yzy, b = Notyzy, sel = ny, out = yout);			// !y?
+	Add16		(a = xout, b = yout, out = xplusy);						// x + y
+	And16		(a = xout, b = yout, out = xandy);						// x & y
+	Mux16		(a = xandy, b = xplusy, sel = f, out = fin);			// f
+	Not16		(in = fin, out = Notfin);								// !f
+	Mux16		(a = fin, b = Notfin, sel = no, out = fout);			// out[16]
+	
+	And16		(a = fout, b = fout, out[0..7] = foutlow);				// less sgf 8 bits of out
+	And16		(a = fout, b = fout, out[8..15] = fouthigh);			// more sgf 8 bits of out
+	Or8Way		(in = foutlow, out = flowor);							// or of less sgf 8 bits of out
+	Or8Way		(in = fouthigh, out = fhighor);							// or of more sgf 8 bits of out
+	Or			(a = flowor, b = fhighor, out = notzr);					// not of zr, if any bit is 1, output will be 1
+	Not			(in = notzr, out = zr);									// zr
+	
+	And16		(a = fout, b = fout, out[15] = foutsb);					// most significant bit of out
+	And			(a = foutsb, b = true, out = ng);						// ng
+	
+	And16		(a = fout, b = fout, out = out);						// final out
+}
